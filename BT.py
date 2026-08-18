@@ -135,7 +135,7 @@ class AppBluetooth:
     # Método constructor
     def __init__(self, ventana):
         self.ventana = ventana
-        self.ventana.title("Escaner de cercanía Bluetooth")
+        self.ventana.title("Escáner de cercanía Bluetooth")
         self.ventana.geometry("880x500")
         self.ventana.minsize(700, 400)
 
@@ -143,17 +143,17 @@ class AppBluetooth:
 
     # Métodos de la clase
     def crear_interfaz(self):
-        # Título
-        titulo = ttk.Label(self.ventana, text="Dispositivos detectados", font=("Segoe UI", 16, "bold"))
-        titulo.pack(pady=(15, 5))
-
         # Descripción
         descripcion = ttk.Label(self.ventana, text="Muestra nombre, RSSI y la estimación de la distancia")
-        descripcion.pack(pady=(0, 4))
+        descripcion.pack(pady=(15, 0))
 
         # Avisos
         aviso = ttk.Label(self.ventana, text="El cálculo de distancia suele variar si hay interferencias (muebles, paredes, personas...)")
-        aviso.pack(pady=(0, 10))
+        aviso.pack(pady=(0, 15))
+
+        # Título
+        titulo = ttk.Label(self.ventana, text="Dispositivos detectados:", font=("Segoe UI", 14, "bold"))
+        titulo.pack(anchor=tk.W, padx=15)
 
         # Tabla
         marco_tabla = ttk.Frame(self.ventana)
