@@ -19,5 +19,5 @@ py -m venv .venv
 E instálalo:
 
 ```
-pip install -r requirements
+pip install -r requirements.txt
 ```
