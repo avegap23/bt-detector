@@ -49,7 +49,7 @@ Funcionamiento:
 # IMPORTS -----------------------------------------------------------------------------------------
 import asyncio # https://docs.python.org/3/library/asyncio.html
 import threading # https://docs.python.org/3/library/threading.html
-import tkinter as tk # https://docs.python.org/3/library/tkinter.htm
+import tkinter as tk # https://docs.python.org/3/library/tkinter.html
 from tkinter import messagebox, ttk # https://docs.python.org/3/library/tkinter.messagebox.html, https://docs.python.org/3/library/tkinter.ttk.html
 
 from bleak import BleakScanner # https://bleak.readthedocs.io/en/latest/index.html
@@ -122,3 +122,143 @@ async def buscar_dispositivos():
                 "tx_power": None,
                 "distancia": calcular_distancia(rssi),
             })
+
+    # 1.- Aparecen los dispositivos cercanos: recibimos el nombre y la distancia al dispositivo
+    dispositivos_encontrados.sort(key = lambda elemento: (elemento["distancia"] if elemento["distancia"] is not None else float("inf"), elemento["nombre"].lower()))
+    # Si el dispositivo tiene la distancia calculada, usalá
+    # Si tiene None, utiliza distancia "infinita", como si fuese "X"
+
+    return dispositivos_encontrados
+
+# CLASS --------------------------------------------------------------------------------------
+class AppBluetooth:
+    # Método constructor
+    def __init__(self, ventana):
+        self.ventana = ventana
+        self.ventana.title("Escaner de cercanía Bluetooth")
+        self.ventana.geometry("880x500")
+        self.ventana.minsize(700, 400)
+
+        self.crear_interfaz() # llamada al método de la clase para la creación del frontend
+
+    # Métodos de la clase
+    def crear_interfaz(self):
+        # Título
+        titulo = ttk.Label(self.ventana, text="Dispositivos detectados", font=("Segoe UI", 16, "bold"))
+        titulo.pack(pady=(15, 5))
+
+        # Descripción
+        descripcion = ttk.Label(self.ventana, text="Muestra nombre, RSSI y la estimación de la distancia")
+        descripcion.pack(pady=(0, 4))
+
+        # Avisos
+        aviso = ttk.Label(self.ventana, text="El cálculo de distancia suele variar si hay interferencias (muebles, paredes, personas...)")
+        aviso.pack(pady=(0, 10))
+
+        # Tabla
+        marco_tabla = ttk.Frame(self.ventana)
+        marco_tabla.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+
+        self.tabla = ttk.Treeview(marco_tabla, columns=("nombre", "direccion", "rssi", "distancia"), show="headings", selectmode="browse")
+
+        self.tabla.heading("nombre", text="Nombre")
+        self.tabla.heading("direccion", text="Dirección/UUID")
+        self.tabla.heading("rssi", text="RSSI")
+        self.tabla.heading("distancia", text="Distancia (aprox.)")
+
+        self.tabla.column("nombre", width=220, minwidth=130, anchor=tk.W)
+        self.tabla.column("direccion", width=280, minwidth=180, anchor=tk.W)
+        self.tabla.column("rssi", width=100, minwidth=80, anchor=tk.CENTER)
+        self.tabla.column("distancia", width=170, minwidth=130, anchor=tk.CENTER)
+
+        # Construcción de la barra vertical (scrollbar)
+        scroll_vertical = ttk.Scrollbar(marco_tabla, orient=tk.VERTICAL, command=self.tabla.yview)
+        self.tabla.configure(yscrollcommand=scroll_vertical.set)
+
+        self.tabla.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_vertical.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Marco inferior tabla
+        marco_inferior = ttk.Frame(self.ventana)
+        marco_inferior.pack(fill=tk.X, padx=15, pady=15)
+
+        self.estado = ttk.Label(marco_inferior, text="Preparado para escanear...")
+        self.estado.pack(side=tk.LEFT)
+
+        # Creación de botón
+        self.boton_escanear = ttk.Button(marco_inferior, text="Escanear", command=self.iniciar_escaneo)
+        self.boton_escanear.pack(side=tk.RIGHT)
+
+    def iniciar_escaneo(self):
+        self.boton_escanear.config(state=tk.DISABLED, text="Escaneando...")
+        self.estado.config(text=(f"Buscando dispositivos durante {SCAN_TIMEOUT:.0f} segundos..."))
+
+        # Preparación de la tabla para insertar información
+        for elemento in self.tabla.get_children():
+            self.tabla.delete(elemento)
+
+        # Vamos de costureo: hilos
+        hilo = threading.Thread(target=self.ejecutar_escaneo, daemon=True)
+        hilo.start()
+
+    def ejecutar_escaneo(self):
+        # Creación del escaner de eventos (bucle de eventos, mejor dicho)
+        loop = asyncio.new_event_loop()
+
+        # Escuchando...
+        try:
+            asyncio.set_event_loop(loop)
+            dispositivos = loop.run_until_complete(buscar_dispositivos()) # procedemos a buscar...
+
+            self.ventana.after(0, self.mostrar_resultados, dispositivos) # después del escaneo
+
+        except Exception as error:
+            self.ventana.after(0, self.mostrar_error, str(error))
+
+        finally:
+            loop.close() # cierre del bucle
+
+    def mostrar_resultados(self, dispositivos):
+        for dispositivo in dispositivos:
+            #adquiriendo la información desde el dispositivo
+            rssi = dispositivo["rssi"]
+            distancia = dispositivo["distancia"]
+
+            # textualizando la información
+            texto_rssi = (f"{rssi} dBm" if rssi is not None else "No disponible")
+            texto_distancia = (f"{distancia:.2f} m" if rssi is not None else "No disponible")
+
+            # inserción de la info en la tabla
+            self.tabla.insert("", tk.END, values=(dispositivo["nombre"], dispositivo["direccion"], texto_rssi, texto_distancia))
+
+        # calculando los dispositivos que se hayan encontrado para...
+        cantidad = len(dispositivos)
+
+        if cantidad == 0:
+            self.estado.config(text="No se han encontrado dispositivos BLE")
+        else:
+            self.estado.config(text=f"Escaneo finalizado: {cantidad} dispositivo(s)")
+
+        # boton escanear
+        self.boton_escanear.config(state=tk.NORMAL, text="Escanear")
+
+    def mostrar_error(self, mensaje):
+        self.estado.config(text="El escaneo no se pudo completar")
+        self.boton_escanear.config(state=tk.NORMAL, text="Escanear")
+
+        # mostrando una ventana de información y error
+        messagebox.showerror(
+             "Error",
+             "No se ha podido completar el escaneo:\n\n"
+             f"{mensaje}\n\n"
+             "Comprobar la conexión Bluetooth y si 'Bleak' está instalado"
+        )
+
+# MAIN --------------------------------------------------------------------------------------------
+def main():
+    ventana = tk.Tk()
+    AppBluetooth(ventana)
+    ventana.mainloop()
+
+if __name__ == "__main__":
+    main()
